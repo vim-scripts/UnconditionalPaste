@@ -1,0 +1,17 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=3355
+
+DESCRIPTION
+If you're like me, you occasionally do a linewise yank, and then want to
+insert that yanked text in the middle of some other line (or vice versa).
+The mappings defined by this plugin will allow you to do a linewise or
+characterwise paste no matter how you yanked the text.
+
+SOURCE
+Based on vimtip #1199 by cory, 
+    http://vim.wikia.com/wiki/Unconditional_linewise_or_characterwise_paste
+
+USAGE
+["x]glp		   Paste linewise (even if yanked text is not a complete
+["x]glP		   line) [count] times. 
+["x]gcp		   Paste characterwise (newline characters are flattened to
+["x]gcP		   spaces) [count] times. 
