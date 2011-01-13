@@ -11,7 +11,10 @@ Based on vimtip #1199 by cory,
     http://vim.wikia.com/wiki/Unconditional_linewise_or_characterwise_paste
 
 USAGE
-["x]glp		   Paste linewise (even if yanked text is not a complete
-["x]glP		   line) [count] times. 
-["x]gcp		   Paste characterwise (newline characters are flattened to
-["x]gcP		   spaces) [count] times. 
+["x]gcp			Paste characterwise (newline characters are flattened
+["x]gcP			to spaces) [count] times. 
+["x]glp			Paste linewise (even if yanked text is not a complete
+["x]glP			line) [count] times. 
+["x]gbp			Paste blockwise (inserting multiple lines in-place,
+["x]gbP			pushing existing text further to the right) [count]
+			times. 
