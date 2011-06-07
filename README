@@ -3,8 +3,8 @@ This is a mirror of http://www.vim.org/scripts/script.php?script_id=3355
 DESCRIPTION
 If you're like me, you occasionally do a linewise yank, and then want to
 insert that yanked text in the middle of some other line (or vice versa).
-The mappings defined by this plugin will allow you to do a linewise or
-characterwise paste no matter how you yanked the text.
+The mappings defined by this plugin will allow you to do a character-, line-,
+or block-wise paste no matter how you yanked the text.
 
 SOURCE
 Based on vimtip #1199 by cory, 
