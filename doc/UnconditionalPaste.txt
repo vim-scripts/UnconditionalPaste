@@ -50,7 +50,7 @@ To uninstall, use the |:RmVimball| command.
 DEPENDENCIES				     *UnconditionalPaste-dependencies*
 
 - Requires Vim 7.0 or higher. 
-- vimscript #2136 repeat.vim autoload script (optional). 
+- repeat.vim (vimscript #2136) plugin (optional). 
 
 ==============================================================================
 CONFIGURATION				    *UnconditionalPaste-configuration*
@@ -76,6 +76,13 @@ IDEAS						    *UnconditionalPaste-ideas*
 
 ==============================================================================
 HISTORY						  *UnconditionalPaste-history*
+
+1.21	02-Dec-2011
+- ENH: When pasting a blockwise register as lines, strip all trailing
+  whitespace. This is useful when cutting a block of text from a column-like
+  text and pasting as new lines.  
+- ENH: When pasting a blockwise register as characters, flatten and shrink all
+  trailing whitespace to a single space. 
 
 1.20	30-Sep-2011
 BUG: Repeat always used the unnamed register. Add register registration to
