@@ -4,17 +4,82 @@ DESCRIPTION
 If you're like me, you occasionally do a linewise yank, and then want to
 insert that yanked text in the middle of some other line (or vice versa).
 The mappings defined by this plugin will allow you to do a character-, line-,
-or block-wise paste no matter how you yanked the text.
+or block-wise paste no matter how you yanked the text, both from normal and
+insert mode.
+
+Often, the register contents aren't quite in the form you need them. Maybe you
+need to convert yanked lines to comma-separated arguments, maybe join the
+lines with another separator, maybe the reverse: un-joining a single line on
+some pattern to yield multiple lines. Though you can do the manipulation after
+pasting, this plugin offers shortcut mappings for these actions, which are
+especially helpful when you need to repeat the paste multiple times.
 
 SOURCE
 Based on vimtip #1199 by cory,
-    http://vim.wikia.com/wiki/Unconditional_linewise_or_characterwise_paste
+    http://vim.wikia.com/wiki/Unconditional_linewise_or_characterwise_paste
+
+RELATED WORKS
+- whitespaste.vim (vimscript #4351) automatically removes blank lines around
+  linewise contents, and condenses inner lines to a single one. By default, it
+  remaps p / P, but this can be changed.
 
 USAGE
-["x]gcp                 Paste characterwise (newline characters are flattened
-["x]gcP                 to spaces) [count] times.
-["x]glp                 Paste linewise (even if yanked text is not a complete
-["x]glP                 line) [count] times.
-["x]gbp                 Paste blockwise (inserting multiple lines in-place,
-["x]gbP                 pushing existing text further to the right) [count]
-                        times.
+["x]gcp, ["x]gcP        Paste characterwise (newline characters and indent are
+                        flattened to spaces) [count] times.
+
+["x]glp, ["x]glP        Paste linewise (even if yanked text is not a complete
+                        line) [count] times.
+
+["x]gbp, ["x]gbP        Paste blockwise (inserting multiple lines in-place,
+                        pushing existing text further to the right) [count]
+                        times.
+
+["x]g,p, ["x]g,P        Paste characterwise, with each line delimited by ", "
+                        instead of the newline (and indent).
+
+["x]gqp, ["x]gqP        Query for a separator string, then paste
+                        characterwise, with each line delimited by it.
+
+["x]gQp, ["x]gQP        Paste characterwise, with each line delimited by the
+                        previously queried (gqp) separator string.
+
+["x]gup, ["x]guP        Query for a separator pattern, un-join the register
+                        contents, then paste linewise.
+
+["x]gUp, ["x]gUP        Un-join the register contents on the previously
+                        queried (gup) separator pattern, then paste
+                        linewise.
+
+["x]gpp, ["x]gpP        Paste with the first number found on or after the
+                        current cursor column (or the overall first number, if
+                        no such match, or the last number, if the cursor is at
+                        the end of the line) incremented / decremented by 1.
+                        Do this [count] times, with each paste further
+                        incremented / decremented.
+
+CTRL-R CTRL-C {0-9a-z"%#*+/:.-}
+                        Insert the contents of a register characterwise
+                        (newline characters and indent are flattened to
+                        spaces).
+                        If you have options like 'textwidth', 'formatoptions',
+                        or 'autoindent' set, this will influence what will be
+                        inserted.
+CTRL-R , {0-9a-z"%#*+/:.-}
+                        Insert the contents of a register characterwise, with
+                        each line delimited by ", " instead of the newline
+                        (and indent).
+CTRL-R CTRL-Q {0-9a-z"%#*+/:.-}
+                        Query for a separator string, then insert the contents
+                        of a register characterwise, with each line delimited
+                        by it.
+CTRL-R CTRL-Q CTRL-Q {0-9a-z"%#*+/:.-}
+                        Insert the contents of a register characterwise, with
+                        each line delimited by the previously queried (gqp,
+                        i_CTRL-R_CTRL-Q) separator string.
+CTRL-R CTRL-U {0-9a-z"%#*+/:.-}
+                        Query for a separator pattern, un-join the contents of
+                        a register, then insert it linewise.
+CTRL-R CTRL-U CTRL-U {0-9a-z"%#*+/:.-}
+                        Un-join the contents of
+                        a register on the previously queried (gup,
+                        i_CTRL_R_CTRL-U) pattern, then insert it linewise.
