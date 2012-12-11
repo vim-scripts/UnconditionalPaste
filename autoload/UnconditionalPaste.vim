@@ -11,6 +11,19 @@
 "	  http://vim.wikia.com/wiki/Unconditional_linewise_or_characterwise_paste
 "
 " REVISION	DATE		REMARKS
+"   2.00.018	07-Dec-2012	FIX: Differentiate between pasteType and a:how
+"				argument, as setregtype() only understands the
+"				former.
+"   2.00.017	06-Dec-2012	CHG: Flatten all whitespace and newlines before,
+"				after, and around lines when pasting
+"				characterwise or joined.
+"   2.00.016	05-Dec-2012	ENH: Add mappings to insert register contents
+"				characterwise (flattened) from insert mode.
+"				ENH: Add mappings to paste lines flattened with
+"				comma, queried, or recalled last used delimiter.
+"				ENH: Add mappings to paste unjoined register
+"				with queried or recalled last used delimiter
+"				pattern.
 "   1.22.015	04-Dec-2012	Split off functions into autoload script.
 "   1.22.014	28-Nov-2012	BUG: When repeat.vim is not installed, the
 "				mappings do nothing. Need to :execute the
@@ -65,16 +78,24 @@ function! UnconditionalPaste#HandleExprReg( exprResult )
     let s:exprResult = a:exprResult
 endfunction
 
-function! s:Flatten( text )
-    " Remove newline characters at the end of the text, convert all other
-    " newlines to a single space.
-    return substitute(substitute(a:text, '\n\+$', '', 'g'), '\n\+', ' ', 'g')
+function! s:Flatten( text, separator )
+    " Remove newlines and whitespace at the begin and end of the text, convert
+    " all other newlines (plus leading and trailing whitespace) to the passed
+    " separator.
+    return substitute(substitute(a:text, '^\s*\%(\n\s*\)*\|\s*\%(\n\s*\)*$', '', 'g'), '\s*\%(\n\s*\)\+', a:separator, 'g')
 endfunction
 function! s:StripTrailingWhitespace( text )
     return substitute(a:text, '\s\+\ze\(\n\|$\)', '', 'g')
 endfunction
+function! s:Unjoin( text, separatorPattern )
+    let l:text = substitute(a:text, a:separatorPattern, '\n', 'g')
 
-function! UnconditionalPaste#Paste( regName, pasteType, pasteCmd )
+    " A (single!) trailing separator is automatically swallowed by the linewise
+    " pasting. For consistency, do the same for a single leading separator.
+    return (l:text =~# '^\n' ? l:text[1:] : l:text)
+endfunction
+
+function! UnconditionalPaste#Paste( regName, how, ... )
     let l:regType = getregtype(a:regName)
     let l:regContent = getreg(a:regName, 1) " Expression evaluation inside function context may cause errors, therefore get unevaluated expression when a:regName ==# '='.
 
@@ -97,19 +118,65 @@ function! UnconditionalPaste#Paste( regName, pasteType, pasteCmd )
 
     try
 	let l:pasteContent = l:regContent
-	if a:pasteType ==# 'c'
+	let l:pasteType = 'l'
+
+	if a:how ==# 'b'
+	    let l:pasteType = 'b'
+	elseif a:how =~# '^[c,qQ]$'
+	    let l:pasteType = 'c'
+
 	    if l:regType[0] ==# "\<C-v>"
-		let l:pasteContent = s:Flatten(s:StripTrailingWhitespace(l:regContent))
+		let l:pasteContent = s:StripTrailingWhitespace(l:regContent)
 	    else
-		let l:pasteContent = s:Flatten(l:regContent)
+		let l:pasteContent = l:regContent
 	    endif
-	elseif a:pasteType ==# 'l' && l:regType[0] ==# "\<C-v>"
+
+	    if a:how ==# 'c'
+		let l:separator = ' '
+	    elseif a:how ==# ','
+		let l:separator = ', '
+	    elseif a:how ==# 'q'
+		let l:separator = input('Enter separator string: ')
+		if empty(l:separator)
+		    execute "normal! \<C-\>\<C-n>\<Esc>" | " Beep.
+		    return ''
+		endif
+		let g:UnconditionalPaste_JoinSeparator = l:separator
+	    elseif a:how ==# 'Q'
+		let l:separator = g:UnconditionalPaste_JoinSeparator
+	    else
+		throw 'ASSERT: Invalid how: ' . string(a:how)
+	    endif
+	    let l:pasteContent = s:Flatten(l:pasteContent, l:separator)
+	elseif a:how ==? 'u'
+	    if a:how ==# 'u'
+		let l:separatorPattern = input('Enter separator pattern: ')
+		if empty(l:separatorPattern)
+		    execute "normal! \<C-\>\<C-n>\<Esc>" | " Beep.
+		    return ''
+		endif
+		let g:UnconditionalPaste_UnjoinSeparatorPattern = l:separatorPattern
+	    endif
+
+	    let l:pasteContent = s:Unjoin(l:pasteContent, g:UnconditionalPaste_UnjoinSeparatorPattern)
+	    if l:pasteContent ==# l:regContent
+		" No unjoining took place; this is probably not what the user
+		" intended (maybe wrong register?), so don't just insert the
+		" contents unchanged, but rather alert the user.
+		execute "normal! \<C-\>\<C-n>\<Esc>" | " Beep.
+		return ''
+	    endif
+	elseif a:how ==# 'l' && l:regType[0] ==# "\<C-v>"
 	    let l:pasteContent = s:StripTrailingWhitespace(l:regContent)
 	endif
 
-	call setreg(l:regName, l:pasteContent, a:pasteType)
-	    execute 'normal! "' . l:regName . (v:count ? v:count : '') . a:pasteCmd
-	call setreg(l:regName, l:regContent, l:regType)
+	if a:0
+	    call setreg(l:regName, l:pasteContent, l:pasteType)
+		execute 'normal! "' . l:regName . (v:count ? v:count : '') . a:1
+	    call setreg(l:regName, l:regContent, l:regType)
+	else
+	    return l:pasteContent
+	endif
     catch /^Vim\%((\a\+)\)\=:E/
 	" v:exception contains what is normally in v:errmsg, but with extra
 	" exception source info prepended, which we cut away.
@@ -123,6 +190,17 @@ function! UnconditionalPaste#Paste( regName, pasteType, pasteCmd )
 	    let &clipboard = l:save_clipboard
 	endif
     endtry
+endfunction
+function! UnconditionalPaste#Insert( regName, how )
+    if a:regName !~? '[0-9a-z"%#*+:.-]'
+	" Note the lack of "="; we don't support the expression register here,
+	" because we would need to do the querying and evaluation all by
+	" ourselves.
+	execute "normal! \<C-\>\<C-n>\<Esc>" | " Beep.
+	return ''
+    endif
+
+    return UnconditionalPaste#Paste(a:regName, a:how)
 endfunction
 
 " vim: set ts=8 sts=4 sw=4 noexpandtab ff=unix fdm=syntax :
