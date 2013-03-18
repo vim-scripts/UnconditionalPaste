@@ -34,6 +34,10 @@ USAGE
                         pushing existing text further to the right) [count]
                         times.
 
+["x]g]p, ["x]g[P  or    Paste linewise (even if yanked text is not a complete
+         ["x]g]P  or    line) [count] times like glp, but adjust the indent
+         ["x]g[p        to the current line (like ]p) .
+
 ["x]g,p, ["x]g,P        Paste characterwise, with each line delimited by ", "
                         instead of the newline (and indent).
 
@@ -56,6 +60,12 @@ USAGE
                         the end of the line) incremented / decremented by 1.
                         Do this [count] times, with each paste further
                         incremented / decremented.
+
+["x]gPp, ["x]gPP        Paste with the all numbers incremented / decremented
+                        by 1.
+                        Do this [count] times, with each paste further
+                        incremented / decremented.
+
 
 CTRL-R CTRL-C {0-9a-z"%#*+/:.-}
                         Insert the contents of a register characterwise
