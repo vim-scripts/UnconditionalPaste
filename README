@@ -54,18 +54,18 @@ USAGE
                         queried (gup) separator pattern, then paste
                         linewise.
 
-["x]gpp, ["x]gpP        Paste with the first number found on or after the
-                        current cursor column (or the overall first number, if
-                        no such match, or the last number, if the cursor is at
-                        the end of the line) incremented / decremented by 1.
+["x]gpp, ["x]gpP        Paste with the first decimal number found on or after
+                        the current cursor column (or the overall first
+                        number, if no such match, or the last number, if the
+                        cursor is at the end of the line) incremented /
+                        decremented by 1.
                         Do this [count] times, with each paste further
                         incremented / decremented.
 
-["x]gPp, ["x]gPP        Paste with the all numbers incremented / decremented
-                        by 1.
+["x]gPp, ["x]gPP        Paste with all decimal numbers incremented /
+                        decremented by 1.
                         Do this [count] times, with each paste further
                         incremented / decremented.
-
 
 CTRL-R CTRL-C {0-9a-z"%#*+/:.-}
                         Insert the contents of a register characterwise
