@@ -36,7 +36,69 @@ USAGE
 
 ["x]g]p, ["x]g[P  or    Paste linewise (even if yanked text is not a complete
          ["x]g]P  or    line) [count] times like glp, but adjust the indent
-         ["x]g[p        to the current line (like ]p) .
+         ["x]g[p        to the current line (like ]p).
+
+["x]g]]p, ["x]g]]P      Paste linewise below / above, with [count] more indent
+                        than the current line.
+["x]g[[p, ["x]g[[P      Paste linewise below / above, with [count] less indent
+                        than the current line.
+
+["x]g>p, ["x]g>P        Paste lines with [count] times 'shiftwidth' indent.
+                        For characterwise and blockwise register contents,
+                        paste at the beginning / end of the line(s) with the
+                        indent before (g>p) / after (g>P) each line's
+                        content. Multiple characterwise lines are flattened
+                        into one as with gcp. The indent of blocks is based
+                        on the current line's width; if subsequent lines are
+                        longer, and additional indent is added there.
+
+["x]g#p, ["x]g#P        Paste linewise (even if yanked text is not a complete
+                        line) as commented text [count] times. This applies
+                        'commentstring' to each individual line, and adjusts
+                        the indent (of the entire comment) to the current line
+                        (like ]p).
+                        This is useful when you want to paste indented text as
+                        comments, but avoid the progressive auto-indenting
+                        that would normally happen with i_CTRL-R.
+
+["x]gsp, ["x]gsP        Paste with [count] spaces (characterwise; blockwise:
+                        around each line) / empty lines (linewise) around the
+                        register contents. When pasting before the start or
+                        after the end of the line / buffer, or with whitespace
+                        / empty lines around the current position, this is
+                        added only to the "other" side, unless there's
+                        emptyness at both sides. (Else, you could just use
+                        plain p|/|P.)
+
+["x]gBp, ["x]gBP        Paste as a minimal fitting (not rectangular) block
+                        with a jagged right edge; i.e. the lines
+                        "foobar\nhi\n" will be pasted as 6-character "foobar"
+                        in the current line and 2-character "hi" in the
+                        following one.
+                        With [count], each line's content is pasted [count]
+                        times.
+                        When pasting with gBp at the end of the line,
+                        appends at the jagged end of following lines.
+                        When pasting with gBP on the first non-indent
+                        character (after column 1) of a line, prepends after
+                        existing indent of following lines.
+
+["x]gdp, ["x]gdP        Query for a separator string, then paste as a minimal
+                        fitting (not rectangular) block (like gBp) with that
+                        separator around each line, omitting the separator at
+                        the start and end of the line or when there's already
+                        one at that side, like with gsp.
+                        With [count], each line's content is pasted [count]
+                        times, with the separator between each.
+                        When pasting with gdp at the end of the line,
+                        appends (with separator) at the jagged end of
+                        following lines.
+                        When pasting with gdP on the first non-indent
+                        character (after column 1) of a line, prepends (with
+                        separator) after existing indent of following lines.
+
+["x]gDp, ["x]gDP        Paste blockwise with the previously queried (gdp)
+                        separator string.
 
 ["x]g,p, ["x]g,P        Paste characterwise, with each line delimited by ", "
                         instead of the newline (and indent).
@@ -74,6 +136,10 @@ CTRL-R CTRL-C {0-9a-z"%#*+/:.-}
                         If you have options like 'textwidth', 'formatoptions',
                         or 'autoindent' set, this will influence what will be
                         inserted.
+                        Note: If the command-line mapping aborts
+                        the command line, try defining
+                            :cnoremap <C-c> <C-c>
+                       or redefine the mapping.
 CTRL-R , {0-9a-z"%#*+/:.-}
                         Insert the contents of a register characterwise, with
                         each line delimited by ", " instead of the newline
@@ -82,6 +148,7 @@ CTRL-R CTRL-Q {0-9a-z"%#*+/:.-}
                         Query for a separator string, then insert the contents
                         of a register characterwise, with each line delimited
                         by it.
+
 CTRL-R CTRL-Q CTRL-Q {0-9a-z"%#*+/:.-}
                         Insert the contents of a register characterwise, with
                         each line delimited by the previously queried (gqp,
@@ -89,6 +156,7 @@ CTRL-R CTRL-Q CTRL-Q {0-9a-z"%#*+/:.-}
 CTRL-R CTRL-U {0-9a-z"%#*+/:.-}
                         Query for a separator pattern, un-join the contents of
                         a register, then insert it linewise.
+
 CTRL-R CTRL-U CTRL-U {0-9a-z"%#*+/:.-}
                         Un-join the contents of
                         a register on the previously queried (gup,

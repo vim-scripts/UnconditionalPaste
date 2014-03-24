@@ -6,7 +6,7 @@
 "   - UnconditionalPaste.vim autoload script
 "   - repeat.vim (vimscript #2136) autoload script (optional)
 
-" Copyright: (C) 2006-2012 Ingo Karkat
+" Copyright: (C) 2006-2014 Ingo Karkat
 "   The VIM LICENSE applies to this script; see ':help copyright'.
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
@@ -14,6 +14,26 @@
 "	  http://vim.wikia.com/wiki/Unconditional_linewise_or_characterwise_paste
 "
 " REVISION	DATE		REMARKS
+"   3.00.033	21-Mar-2014	Add gBp mapping to paste as a minimal fitting
+"				block with jagged right edge, a separator-less
+"				variant of gDp.
+"				Add g>p mapping to paste shifted register
+"				contents.
+"				Add g:UnconditionalPaste_IsFullLineRetabOnShift
+"				configuration whether to use the
+"				AlignFromCursor.vim functionality if it's there.
+"				Add g]]p and g[[p mappings to paste like with
+"				g]p, but with more / less indent.
+"   3.00.032	20-Mar-2014	Add gdp / gDp mappings to paste as a minimal
+"				fitting block with (queried / recalled)
+"				separator string, with special cases at the end
+"				of leading indent and at the end of the line.
+"   3.00.031	19-Mar-2014	Add g#p mapping to apply 'commentstring' to each
+"				indented linewise paste.
+"				Add gsp mapping to paste with [count] spaces /
+"				empty lines around the register contents.
+"   3.00.030	14-Mar-2014	ENH: Extend CTRL-R insert mode mappings to
+"				command-line mode.
 "   2.20.020	18-Mar-2013	ENH: Add g]p / g]P mappings to paste linewise
 "				with adjusted indent. Thanks to Gary Fixler for
 "				the suggestion.
@@ -102,6 +122,9 @@ set cpo&vim
 
 "- configuration ---------------------------------------------------------------
 
+if ! exists('g:UnconditionalPaste_Separator')
+    let g:UnconditionalPaste_Separator = "\t"
+endif
 if ! exists('g:UnconditionalPaste_JoinSeparator')
     let g:UnconditionalPaste_JoinSeparator = "\t"
 endif
@@ -109,15 +132,24 @@ if ! exists('g:UnconditionalPaste_UnjoinSeparatorPattern')
     let g:UnconditionalPaste_UnjoinSeparatorPattern = '\_s\+'
 endif
 
+if ! exists('g:UnconditionalPaste_IsFullLineRetabOnShift')
+    let g:UnconditionalPaste_IsFullLineRetabOnShift = 0
+endif
 
 
 "- mappings --------------------------------------------------------------------
 
 function! s:CreateMappings()
-    for [l:pasteName, pasteType] in
+    for [l:pasteName, l:pasteType] in
     \   [
     \       ['Char', 'c'], ['Line', 'l'], ['Block', 'b'], ['Comma', ','],
     \       ['Indented', 'l'],
+    \       ['MoreIndent', 'm'], ['LessIndent', 'n'],
+    \       ['Shifted', '>'],
+    \       ['Commented', '#'],
+    \       ['Spaced', 's'],
+    \       ['Jagged', 'B'],
+    \       ['Delimited', 'd'], ['RecallDelimited', 'D'],
     \       ['Queried', 'q'], ['RecallQueried', 'Q'],
     \       ['Unjoin', 'u'], ['RecallUnjoin', 'U'],
     \       ['Plus', 'p'], ['PlusRepeat', '.p'],
@@ -131,20 +163,27 @@ function! s:CreateMappings()
 	    let l:pasteMappingDefaultKeys = (len(l:pasteType) == 1 ? l:pasteType . l:pasteCmd : '')
 
 
-	    if l:pasteName ==# 'Indented'
+	    if l:pasteName =~# 'Indent\|^Commented$'
+		if l:pasteName ==# 'Indented'
+		    let l:pasteMappingDefaultKeys = ']' . l:pasteCmd
+
+		    " Define additional variations like with the built-in ]P.
+		    if ! hasmapto('<Plug>UnconditionalPasteIndentBefore', 'n')
+			nmap g]P <Plug>UnconditionalPasteIndentedBefore
+			nmap g[P <Plug>UnconditionalPasteIndentedBefore
+			nmap g[p <Plug>UnconditionalPasteIndentedBefore
+		    endif
+		elseif l:pasteName ==# 'MoreIndent'
+		    let l:pasteMappingDefaultKeys = ']]' . l:pasteCmd
+		elseif l:pasteName ==# 'LessIndent'
+		    let l:pasteMappingDefaultKeys = '[[' . l:pasteCmd
+		endif
+
 		" This is a variant of forced linewise paste (glp) that uses ]p
 		" instead of p for pasting.
-		let l:pasteMappingDefaultKeys = ']' . l:pasteCmd
 		let l:pasteCmd = ']' . l:pasteCmd
-
-		" Define additional variations like with the built-in ]P.
-		if ! hasmapto('<Plug>UnconditionalPasteIndentBefore', 'n')
-		    nmap g]P <Plug>UnconditionalPasteIndentedBefore
-		    nmap g[P <Plug>UnconditionalPasteIndentedBefore
-		    nmap g[p <Plug>UnconditionalPasteIndentedBefore
-		endif
 	    endif
-	    if l:pasteType ==# 'q' || l:pasteType ==# 'u'
+	    if l:pasteType ==# 'd' || l:pasteType ==# 'q' || l:pasteType ==# 'u'
 		" On repeat of one of the mappings that query, we want to skip
 		" the query and recall the last queried separator instead.
 		let l:mappingName = 'UnconditionalPasteRecall' . l:pasteName . l:direction
@@ -181,7 +220,7 @@ function! s:CreateMappings()
 	endfor
     endfor
 
-    for [l:pasteName, pasteType, pasteKey] in
+    for [l:pasteName, l:pasteType, l:pasteKey] in
     \   [
     \       ['Char', 'c', '<C-c>'], ['Comma', ',', ','],
     \       ['Queried', 'q', '<C-q>'], ['RecallQueried', 'Q', '<C-q><C-q>'],
@@ -192,16 +231,21 @@ function! s:CreateMappings()
 	" as typed); i_CTRL-R_CTRL-R with the expression register cannot insert
 	" newlines (^@ are inserted), and i_CTRL-R_CTRL-O inserts above the
 	" current line when the register ends with a newline.
-	execute printf('inoremap <silent> %s <C-r>=UnconditionalPaste#Insert(nr2char(getchar()), %s)<CR>',
-	\   l:plugMappingName,
-	\   string(l:pasteType)
-	\)
-	if ! hasmapto(l:plugMappingName, 'i')
-	    execute printf('imap <C-r>%s %s',
-	    \   l:pasteKey,
-	    \   l:plugMappingName
+	for l:mode in ['i', 'c']
+	    execute printf('%snoremap <silent> %s <C-r>=UnconditionalPaste#Insert(nr2char(getchar()), %s, %d)<CR>',
+	    \   l:mode,
+	    \   l:plugMappingName,
+	    \   string(l:pasteType),
+	    \   (l:mode ==# 'i')
 	    \)
-	endif
+	    if ! hasmapto(l:plugMappingName, l:mode)
+		execute printf('%smap <C-r>%s %s',
+		\   l:mode,
+		\   l:pasteKey,
+		\   l:plugMappingName
+		\)
+	    endif
+	endfor
     endfor
 endfunction
 call s:CreateMappings()

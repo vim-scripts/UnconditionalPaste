@@ -2,8 +2,11 @@
 " how it was yanked.
 "
 " DEPENDENCIES:
+"   - UnconditionalPaste/Increment.vim autoload script
+"   - UnconditionalPaste/Separators.vim autoload script
+"   - UnconditionalPaste/Shifted.vim autoload script
 
-" Copyright: (C) 2006-2013 Ingo Karkat
+" Copyright: (C) 2006-2014 Ingo Karkat
 "   The VIM LICENSE applies to this script; see ':help copyright'.
 "
 " Maintainer:	Ingo Karkat <ingo@karkat.de>
@@ -11,6 +14,42 @@
 "	  http://vim.wikia.com/wiki/Unconditional_linewise_or_characterwise_paste
 "
 " REVISION	DATE		REMARKS
+"   3.00.028	21-Mar-2014	Add gBp mapping that is a separator-less version
+"				of gDp.
+"				When pasting additional lines with gBp / gDp,
+"				space-indent them to the cursor position, like
+"				the default blockwise paste does (but not for
+"				the special prepend / append cases).
+"				Add g>p mapping to paste shifted register
+"				contents.
+"				Factor out functions required only by certain
+"				paste types into separate autoload scripts.
+"				Add g]]p and g[[p mappings to paste like with
+"				g]p, but with more / less indent.
+"   3.00.027	20-Mar-2014	Avoid gsp inserting spaces / empty lines on a
+"				side where there's already whitespace / empty
+"				lines (but not when on both sides). This doesn't
+"				consider [count], as it would be too difficult
+"				to implement.
+"				Extract s:CheckSeparators() for reuse by the
+"				following mapping.
+"				Add gdp / gDp mappings to paste as a minimal
+"				fitting block with (queried / recalled)
+"				separator string, with special cases at the end
+"				of leading indent and at the end of the line.
+"   3.00.026	19-Mar-2014	Add g#p mapping to apply 'commentstring' to each
+"				indented linewise paste.
+"				Add gsp mapping to paste with [count] spaces /
+"				empty lines around the register contents.
+"   3.00.025	18-Mar-2014	When doing gqp / q,p of a characterwise or
+"				single line, put the separator in front (gqp) /
+"				after (gqP); otherwise, the mapping is identical
+"				to normal p / P and therefore worthless.
+"   2.30.024	14-Mar-2014	Make beep in UnconditionalPaste#Insert()
+"				configurable; in command-line mode, no beep
+"				occurs when an invalid register is specified.
+"   2.22.023	14-Jun-2013	Minor: Make substitute() robust against
+"				'ignorecase'.
 "   2.21.022	11-Apr-2013	FIX: In gpp and gPp, keep leading zeros when
 "				incrementing the number.
 "				FIX: In gpp and gPp, do not interpret leading
@@ -100,6 +139,8 @@
 "	0.02	10-Apr-2006	Added flattening (replacing newlines with
 "				spaces) for characterwise paste.
 "	0.01	10-Apr-2006	file creation from vimtip #1199
+let s:save_cpo = &cpo
+set cpo&vim
 
 function! UnconditionalPaste#HandleExprReg( exprResult )
     let s:exprResult = a:exprResult
@@ -114,6 +155,9 @@ endfunction
 function! s:StripTrailingWhitespace( text )
     return substitute(a:text, '\s\+\ze\(\n\|$\)', '', 'g')
 endfunction
+function! s:IsSingleElement( text )
+    return a:text !~# '\n.*\%(\n\|\S\)'
+endfunction
 function! s:Unjoin( text, separatorPattern )
     let l:text = substitute(a:text, a:separatorPattern, '\n', 'g')
 
@@ -123,48 +167,8 @@ function! s:Unjoin( text, separatorPattern )
 endfunction
 " Note: Could use ingo#number#DecimalStringIncrement(), but avoid dependency to
 " ingo-library for now.
-function! s:DecimalNumberStringIncrement( number, offset )
-    " Note: Need to use str2nr() to avoid interpreting leading zeros as octal
-    " number.
-    return printf('%0' . strlen(a:number) . 'd', str2nr(a:number) + a:offset)
-endfunction
-function! s:IncrementLine( line, vcol, replacement )
-    if a:vcol == -1 || a:vcol == 0 && col('.') + 1 == col('$')
-	" Increment the last number.
-	return [-1, substitute(a:line, '\d\+\ze\D*$', a:replacement, '')]
-    endif
-
-    let l:text = a:line
-    let l:vcol = (a:vcol == 0 ? virtcol('.') : a:vcol)
-    if l:vcol > 1
-	return [l:vcol, substitute(a:line, '\d*\%>' . (l:vcol - 1) . 'v\d\+', a:replacement, '')]
-    else
-	return [1, substitute(a:line, '\d\+', a:replacement, '')]
-    endif
-endfunction
-function! s:SingleIncrement( text, vcol, offset )
-    let l:replacement = '\=s:DecimalNumberStringIncrement(submatch(0),' . a:offset . ')'
-
-    let l:didIncrement = 0
-    let l:vcol = 0
-    let l:result = []
-    for l:line in split(a:text, "\n", 1)
-	let [l:vcol, l:incrementedLine] = s:IncrementLine(l:line, a:vcol, l:replacement)
-	let l:didIncrement = l:didIncrement || (l:line !=# l:incrementedLine)
-	call add(l:result, l:incrementedLine)
-    endfor
-
-    if ! l:didIncrement
-	" Fall back to incrementing the first number.
-	let l:vcol = 0
-	let l:result = map(split(a:text, "\n", 1), 'substitute(v:val, "\\d\\+", l:replacement, "")')
-    endif
-
-    return [l:vcol, join(l:result, "\n")]
-endfunction
-function! s:GlobalIncrement( text, vcol, offset )
-    let l:replacement = '\=s:DecimalNumberStringIncrement(submatch(0),' . a:offset . ')'
-    return [0, substitute(a:text, '\d\+', l:replacement, 'g')]
+function! UnconditionalPaste#IsAtEndOfLine()
+    return (col('.') + len(matchstr(getline('.'), '.$')) >= col('$'))    " I18N: Cannot just add 1; need to consider the byte length of the last character in the line.
 endfunction
 
 function! UnconditionalPaste#GetCount()
@@ -185,6 +189,8 @@ function! UnconditionalPaste#Paste( regName, how, ... )
 	let l:regName = '"'
 	let l:regContent = s:exprResult
 
+	" Note: Because of the conditional and because there is no yank
+	" involved, do not use ingo#register#KeepRegisterExecuteOrFunc() here.
 	let l:save_clipboard = &clipboard
 	set clipboard= " Avoid clobbering the selection and clipboard registers.
 	let l:save_reg = getreg(l:regName)
@@ -196,6 +202,7 @@ function! UnconditionalPaste#Paste( regName, how, ... )
     try
 	let l:pasteContent = l:regContent
 	let l:pasteType = 'l'
+	let l:shiftCommand = ''
 
 	if a:how ==# 'b'
 	    let l:pasteType = 'b'
@@ -204,8 +211,6 @@ function! UnconditionalPaste#Paste( regName, how, ... )
 
 	    if l:regType[0] ==# "\<C-v>"
 		let l:pasteContent = s:StripTrailingWhitespace(l:regContent)
-	    else
-		let l:pasteContent = l:regContent
 	    endif
 
 	    if a:how ==# 'c'
@@ -233,6 +238,22 @@ function! UnconditionalPaste#Paste( regName, how, ... )
 	    endif
 
 	    let l:pasteContent = s:Flatten(l:pasteContent, l:separator)
+
+	    if a:0 && a:how !=# 'c' && s:IsSingleElement(l:regContent)
+		" DWIM: Put the separator in front (gqp) / after (gqP);
+		" otherwise, the mapping is identical to normal p / P and
+		" therefore worthless. Do not do this for plain gcp / gcP, as
+		" I often use that mapping to avoid the special handling of
+		" smartput.vim, and this embellishment would counter that.
+		" For that case, better use gsp.
+		if a:1 ==# 'p'
+		    let l:pasteContent = l:separator . l:pasteContent
+		elseif a:1 ==# 'P'
+		    let l:pasteContent .= l:separator
+		else
+		    throw 'ASSERT: unknown paste command: ' . string(a:1)
+		endif
+	    endif
 	elseif a:how ==? 'u'
 	    if a:how ==# 'u'
 		let l:separatorPattern = input('Enter separator pattern: ')
@@ -253,6 +274,118 @@ function! UnconditionalPaste#Paste( regName, how, ... )
 	    endif
 	elseif a:how ==# 'l' && l:regType[0] ==# "\<C-v>"
 	    let l:pasteContent = s:StripTrailingWhitespace(l:regContent)
+	elseif a:how =~# '^[mn]$'
+	    let l:shiftCount = max([l:count, 1])
+	    let l:shiftCommand = (a:how ==# 'm' ? '>' : '<')
+	    let l:count = 0
+
+	    if l:regType[0] ==# "\<C-v>"
+		let l:pasteContent = s:StripTrailingWhitespace(l:regContent)
+	    endif
+	elseif a:how ==# '>'
+	    let l:shiftCount = max([l:count, 1])
+	    let l:count = 0
+	    if l:regType ==# 'V'
+		let l:shiftCommand = '>'
+	    else
+		if l:regType ==# 'v'
+		    let l:lines = [s:Flatten(l:pasteContent, ' ')]
+		else
+		    let l:lines = split(l:pasteContent, '\n', 1)
+		endif
+
+		if a:1 ==# 'P'
+		    call UnconditionalPaste#Shifted#SpecialShiftedPrepend(l:lines, l:shiftCount)
+		else
+		    call UnconditionalPaste#Shifted#SpecialShiftedAppend(l:lines, l:shiftCount)
+		endif
+		return ''
+	    endif
+	elseif a:how ==# '#'
+	    if empty(&commentstring)
+		execute "normal! \<C-\>\<C-n>\<Esc>" | " Beep.
+		return ''
+	    endif
+
+	    let l:pasteContent =
+	    \   join(
+	    \       map(
+	    \           split(l:pasteContent, '\n', 1),
+	    \           'empty(v:val) ? "" : printf(&commentstring, v:val)'
+	    \       ),
+	    \       "\n"
+	    \   )
+	elseif a:how ==# 's'
+	    let l:pasteType = l:regType " Keep the original paste type.
+
+	    let [l:isPrefix, l:isSuffix] = UnconditionalPaste#Separators#Check(l:regType, a:1, '\s', 1)
+	    let l:spaceCharacter = (l:regType ==# 'V' ? "\n" : ' ')
+	    let l:prefix = (l:isPrefix ? repeat(l:spaceCharacter, max([l:count, 1])) : '')
+	    let l:suffix = (l:isSuffix ? repeat(l:spaceCharacter, max([l:count, 1])) : '')
+	    let l:count = 0
+
+	    if l:regType ==# 'v'
+		let l:pasteContent = l:prefix . l:pasteContent . l:suffix
+	    elseif l:regType ==# 'V'
+		let l:pasteContent = l:prefix . l:pasteContent . l:suffix
+	    else
+		let l:pasteContent = join(map(split(l:pasteContent, '\n', 1), 'l:prefix . v:val . l:suffix'), "\n")
+	    endif
+	elseif a:how =~# '^[dDB]$'
+	    if a:how ==# 'B'
+		let l:separator = ''
+	    elseif a:how ==# 'D'
+		let l:separator = g:UnconditionalPaste_Separator
+	    elseif a:how ==# 'd'
+		let l:separator = input('Enter separator string: ')
+		if empty(l:separator)
+		    execute "normal! \<C-\>\<C-n>\<Esc>" | " Beep.
+		    return ''
+		endif
+		let g:UnconditionalPaste_Separator = l:separator
+	    else
+		throw 'ASSERT: Invalid how: ' . string(a:how)
+	    endif
+
+
+	    let l:isMultiLine = (l:pasteContent =~# '\n')
+	    if l:isMultiLine && a:1 ==# 'P' && search('^\s\+\%#\S', 'bcnW', line('.')) != 0
+		let [l:isPrefix, l:isSuffix, l:pasteType] = [0, 1, 'prepend']
+	    elseif l:isMultiLine && a:1 ==# 'p' && UnconditionalPaste#IsAtEndOfLine() && getline('.') =~# '.'
+		let [l:isPrefix, l:isSuffix, l:pasteType] = [1, 0, 'append']
+	    else
+		if a:how ==# 'B'
+		    let [l:isPrefix, l:isSuffix] = [0, 0]
+		else
+		    let [l:isPrefix, l:isSuffix] = UnconditionalPaste#Separators#Check('v', a:1, '\V\C' . escape(l:separator, '\'), 0)
+		endif
+		let l:pasteType = 'b'
+	    endif
+	    let l:prefix = (l:isPrefix ? l:separator : '')
+	    let l:suffix = (l:isSuffix ? l:separator : '')
+
+	    let l:lines = split(l:pasteContent, '\n', 1)
+	    if l:regType ==# 'V' && empty(l:lines[-1]) | call remove(l:lines, -1) | endif
+	    call map(
+	    \   l:lines,
+	    \   'l:prefix . (l:count > 1 ? repeat(v:val . l:separator, l:count - 1) : "") . v:val . l:suffix'
+	    \)
+	    let l:count = 0
+
+	    if l:pasteType ==# 'prepend'
+		call UnconditionalPaste#Separators#SpecialPasteLines(l:lines, '^\s*\zs\S\|$', '')
+		return ''
+	    elseif l:pasteType ==# 'append'
+		call UnconditionalPaste#Separators#SpecialPasteLines(l:lines, '$', '')
+		return ''
+	    elseif l:isMultiLine
+		let l:pasteColExpr = '\%>' . (virtcol('.') - (a:1 ==# 'P' ? 1 : 0)) . 'v'
+		let l:newLineIndent = repeat(' ', virtcol('.') - (a:1 ==# 'P' ? 1 : 0))
+		call UnconditionalPaste#Separators#SpecialPasteLines(l:lines, l:pasteColExpr, l:newLineIndent)
+		return ''
+	    endif
+
+	    let l:pasteContent = join(l:lines, "\n")
 	elseif a:how ==? 'p' || a:how ==? '.p'
 	    let l:pasteType = l:regType " Keep the original paste type.
 	    let l:offset = (a:1 ==# 'p' ? 1 : -1)
@@ -271,7 +404,7 @@ function! UnconditionalPaste#Paste( regName, how, ... )
 	    endif
 	    let s:lastCount = l:baseCount
 
-	    let l:IncrementFunc = (a:how ==# 'p' || a:how ==# '.p' ? 's:SingleIncrement' : 's:GlobalIncrement')
+	    let l:IncrementFunc = (a:how ==# 'p' || a:how ==# '.p' ? 'UnconditionalPaste#Increment#Single' : 'UnconditionalPaste#Increment#Global')
 	    let [s:lastVcol, l:pasteContent] = call(l:IncrementFunc, [l:regContent, l:vcol, l:offset * l:baseCount])
 	    if l:pasteContent ==# l:regContent
 		" No number was found in the register; this is probably not what
@@ -295,13 +428,19 @@ function! UnconditionalPaste#Paste( regName, how, ... )
 	    call setreg(l:regName, l:pasteContent, l:pasteType)
 		execute 'normal! "' . l:regName . (l:count ? l:count : '') . a:1
 	    call setreg(l:regName, l:regContent, l:regType)
+
+	    if ! empty(l:shiftCommand)
+		for l:cnt in range(l:shiftCount)    " Repeatedly use the :> command; multiple shiftwidths can only be indented from visual mode, but we don't want to clobber the selection, and expect only low [count]s, anyway.
+		    execute "silent '[,']" . l:shiftCommand
+		endfor
+	    endif
 	else
 	    return l:pasteContent
 	endif
     catch /^Vim\%((\a\+)\)\=:E/
 	" v:exception contains what is normally in v:errmsg, but with extra
 	" exception source info prepended, which we cut away.
-	let v:errmsg = substitute(v:exception, '^Vim\%((\a\+)\)\=:', '', '')
+	let v:errmsg = substitute(v:exception, '^\CVim\%((\a\+)\)\=:', '', '')
 	echohl ErrorMsg
 	echomsg v:errmsg
 	echohl None
@@ -312,16 +451,20 @@ function! UnconditionalPaste#Paste( regName, how, ... )
 	endif
     endtry
 endfunction
-function! UnconditionalPaste#Insert( regName, how )
+function! UnconditionalPaste#Insert( regName, how, isBeep )
     if a:regName !~? '[0-9a-z"%#*+:.-]'
 	" Note the lack of "="; we don't support the expression register here,
 	" because we would need to do the querying and evaluation all by
 	" ourselves.
-	execute "normal! \<C-\>\<C-n>\<Esc>" | " Beep.
+	if a:isBeep
+	    execute "normal! \<C-\>\<C-n>\<Esc>" | " Beep.
+	endif
 	return ''
     endif
 
     return UnconditionalPaste#Paste(a:regName, a:how)
 endfunction
 
+let &cpo = s:save_cpo
+unlet s:save_cpo
 " vim: set ts=8 sts=4 sw=4 noexpandtab ff=unix fdm=syntax :
