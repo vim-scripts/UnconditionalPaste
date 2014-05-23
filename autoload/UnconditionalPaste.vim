@@ -14,6 +14,10 @@
 "	  http://vim.wikia.com/wiki/Unconditional_linewise_or_characterwise_paste
 "
 " REVISION	DATE		REMARKS
+"   3.01.029	05-May-2014	For gsp, remove surrounding whitespace
+"				(characterwise) / empty lines (linewise) before
+"				adding the spaces / empty lines. This ensures a
+"				more dependable and deterministic DWIM behavior.
 "   3.00.028	21-Mar-2014	Add gBp mapping that is a separator-less version
 "				of gDp.
 "				When pasting additional lines with gBp / gDp,
@@ -165,7 +169,7 @@ function! s:Unjoin( text, separatorPattern )
     " pasting. For consistency, do the same for a single leading separator.
     return (l:text =~# '^\n' ? l:text[1:] : l:text)
 endfunction
-" Note: Could use ingo#number#DecimalStringIncrement(), but avoid dependency to
+" Note: Could use ingo#cursor#IsAtEndOfLine(), but avoid dependency to
 " ingo-library for now.
 function! UnconditionalPaste#IsAtEndOfLine()
     return (col('.') + len(matchstr(getline('.'), '.$')) >= col('$'))    " I18N: Cannot just add 1; need to consider the byte length of the last character in the line.
@@ -325,11 +329,12 @@ function! UnconditionalPaste#Paste( regName, how, ... )
 	    let l:count = 0
 
 	    if l:regType ==# 'v'
-		let l:pasteContent = l:prefix . l:pasteContent . l:suffix
+		" Note: Could use ingo#str#Trim() here.
+		let l:pasteContent = l:prefix . substitute(l:regContent, '^\_s*\(.\{-}\)\_s*$', '\1', '') . l:suffix
 	    elseif l:regType ==# 'V'
-		let l:pasteContent = l:prefix . l:pasteContent . l:suffix
+		let l:pasteContent = l:prefix . substitute(l:regContent, '^\n*\(.\{-}\)\n*$', '\1\n', '') . l:suffix
 	    else
-		let l:pasteContent = join(map(split(l:pasteContent, '\n', 1), 'l:prefix . v:val . l:suffix'), "\n")
+		let l:pasteContent = join(map(split(l:regContent, '\n', 1), 'l:prefix . v:val . l:suffix'), "\n")
 	    endif
 	elseif a:how =~# '^[dDB]$'
 	    if a:how ==# 'B'
@@ -437,7 +442,7 @@ function! UnconditionalPaste#Paste( regName, how, ... )
 	else
 	    return l:pasteContent
 	endif
-    catch /^Vim\%((\a\+)\)\=:E/
+    catch /^Vim\%((\a\+)\)\=:/
 	" v:exception contains what is normally in v:errmsg, but with extra
 	" exception source info prepended, which we cut away.
 	let v:errmsg = substitute(v:exception, '^\CVim\%((\a\+)\)\=:', '', '')
