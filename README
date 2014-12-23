@@ -104,8 +104,17 @@ USAGE
 ["x]g,p, ["x]g,P        Paste characterwise, with each line delimited by ", "
                         instead of the newline (and indent).
 
+["x]g,'p, ["x]g,'P      Paste characterwise, with each line surrounded by
+["x]g,"p, ["x]g,"P      single / double quotes and delimited by ", " instead
+                        of the newline (and indent).
+
 ["x]gqp, ["x]gqP        Query for a separator string, then paste
                         characterwise, with each line delimited by it.
+                        You can also additionally input a prefix and suffix
+                        (as {prefix}^M{separator}^M{suffix}, with ^M entered
+                        as <C-V><Enter>). Examples:
+                        "^M, ^M"   -> "foo, bar, baz"
+                        "^M", "^M" -> "foo", "bar", "baz"
 
 ["x]gQp, ["x]gQP        Paste characterwise, with each line delimited by the
                         previously queried (gqp) separator string.
@@ -148,7 +157,7 @@ CTRL-R , {0-9a-z"%#*+/:.-}
 CTRL-R CTRL-Q {0-9a-z"%#*+/:.-}
                         Query for a separator string, then insert the contents
                         of a register characterwise, with each line delimited
-                        by it.
+                        by it. Like gqp, but in insert mode.
 
 CTRL-R CTRL-Q CTRL-Q {0-9a-z"%#*+/:.-}
                         Insert the contents of a register characterwise, with
